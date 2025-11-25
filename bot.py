@@ -1,11 +1,10 @@
-import logging
 import os
+import logging
 import random
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import sqlite3
 from datetime import date
-import asyncio
+from telegram import Update
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
 
 # Настройка логирования
 logging.basicConfig(
@@ -83,7 +82,7 @@ def get_stats(user_id):
     return result[0] if result else 0
 
 # Команда /start
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def start(update: Update, context: CallbackContext):
     welcome_text = """
 🚀 Привет! Я твой «5-минутный Стартер»!
 
@@ -98,10 +97,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 Готов сделать первый шаг? 🎯
 """
-    await update.message.reply_text(welcome_text)
+    update.message.reply_text(welcome_text)
 
 # Команда /help
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def help_command(update: Update, context: CallbackContext):
     help_text = """
 📖 **Как пользоваться ботом:**
 
@@ -114,14 +113,16 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 - Выбери самую маленькую часть работы
 - Главное — НАЧАТЬ!
 """
-    await update.message.reply_text(help_text, parse_mode='Markdown')
+    update.message.reply_text(help_text, parse_mode='Markdown')
 
 # Команда /sprint
-async def start_sprint(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def start_sprint(update: Update, context: CallbackContext):
+    if 'user_data' not in context.__dict__:
+        context.user_data = {}
     context.user_data.clear()
     context.user_data['waiting_for_task'] = True
     
-    await update.message.reply_text(
+    update.message.reply_text(
         "🎯 *Какую задачу ты будешь делать эти 5 минут?*\n\n"
         "Например: 'написать 3 предложения', 'разобрать бумаги на столе', 'создать структуру документа'\n\n"
         "Опиши её в одном сообщении:",
@@ -129,12 +130,12 @@ async def start_sprint(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # Команда /motivate
-async def motivate(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def motivate(update: Update, context: CallbackContext):
     motivation = random.choice(MOTIVATION_PHRASES)
-    await update.message.reply_text(motivation, parse_mode='Markdown')
+    update.message.reply_text(motivation, parse_mode='Markdown')
 
 # Команда /progress
-async def progress(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def progress(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     today_sprints = get_stats(user_id)
     
@@ -147,7 +148,7 @@ async def progress(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         message = f"📊 *Восхитительно!* {today_sprints} спринтов — ты просто машина продуктивности! \n\nПродолжаешь? /sprint 🔥"
     
-    await update.message.reply_text(message, parse_mode='Markdown')
+    update.message.reply_text(message, parse_mode='Markdown')
 
 # Умная система анализа достижений
 def analyze_achievements(text):
@@ -172,15 +173,19 @@ def get_praise_message(sprints_count, achievement_type):
     
     return f"{sprint_praise}\n\n{achievement_praise}"
 
-# Обработчик описания задачи
-async def handle_task_description(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# Обработчик сообщений
+def handle_message(update: Update, context: CallbackContext):
+    if 'user_data' not in context.__dict__:
+        context.user_data = {}
+        
     if context.user_data.get('waiting_for_task'):
+        # Обработка описания задачи
         task_description = update.message.text
         context.user_data['current_task'] = task_description
         context.user_data['waiting_for_task'] = False
         context.user_data['waiting_for_reflection'] = True
         
-        await update.message.reply_text(
+        update.message.reply_text(
             f"⏱️ *Отлично! Запускаю 5-минутный спринт!*\n\n"
             f"*Задача:* {task_description}\n"
             f"*Время:* 5 минут\n\n"
@@ -189,24 +194,21 @@ async def handle_task_description(update: Update, context: ContextTypes.DEFAULT_
         )
         
         # Запускаем таймер
-        async def callback():
-            await asyncio.sleep(300)  # 5 минут
+        def callback(context):
             user_id = update.effective_user.id
             save_sprint(user_id)
-            await update.message.reply_text(
-                "🔔 *Время вышло! 5 минут прошли!*\n\n"
-                "Отлично сработано! Теперь ответь на два вопроса:\n\n"
-                "1. *Что тебе удалось сделать за эти 5 минут?* (Опиши кратко)\n"
-                "2. *Стало ли сейчас проще продолжить?* (Да/Нет)",
+            context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="🔔 *Время вышло! 5 минут прошли!*\n\n"
+                     "Отлично сработано! Теперь ответь на вопрос:\n\n"
+                     "*Что тебе удалось сделать за эти 5 минут?* (Опиши кратко)",
                 parse_mode='Markdown'
             )
         
-        # Запускаем асинхронную задачу
-        asyncio.create_task(callback())
-
-# Обработчик рефлексии после спринта
-async def handle_reflection(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if context.user_data.get('waiting_for_reflection'):
+        context.job_queue.run_once(callback, 300, context=update)
+    
+    elif context.user_data.get('waiting_for_reflection'):
+        # Обработка отчёта о спринте
         reflection_text = update.message.text
         user_id = update.effective_user.id
         today_sprints = get_stats(user_id)
@@ -215,19 +217,13 @@ async def handle_reflection(update: Update, context: ContextTypes.DEFAULT_TYPE):
         achievement_type = analyze_achievements(reflection_text)
         praise = get_praise_message(today_sprints, achievement_type)
         
-        # Анализируем настроение
-        if any(word in reflection_text.lower() for word in ['да', 'легче', 'проще', 'продолжу']):
-            motivation = "\n\n🎯 *Отличный настрой!* Используй этот импульс и продолжай прямо сейчас!"
-        else:
-            motivation = "\n\n💪 *Ты на правильном пути!* Следующий шаг будет легче!"
-        
         # Формируем ответ
         emoji = "🏆" if achievement_type == "completion" else "🚀" if achievement_type == "progress" else "🎯"
         
         response = f"""
 {emoji} *Отличная работа!*
 
-{praise}{motivation}
+{praise}
 
 *Статистика на сегодня:* {today_sprints} спринтов • {today_sprints * 5} минут в работе
 
@@ -238,11 +234,19 @@ async def handle_reflection(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 *Помни: каждый спринт приближает тебя к цели!* ✨
 """
-        await update.message.reply_text(response, parse_mode='Markdown')
+        update.message.reply_text(response, parse_mode='Markdown')
         context.user_data['waiting_for_reflection'] = False
+    else:
+        update.message.reply_text(
+            "Используйте команды для работы с ботом:\n"
+            "/sprint - начать 5-минутный спринт\n"
+            "/stats - посмотреть статистику\n"
+            "/motivate - получить мотивацию",
+            parse_mode='Markdown'
+        )
 
 # Команда /stats
-async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def show_stats(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     today_sprints = get_stats(user_id)
     
@@ -260,43 +264,30 @@ async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         message = "📊 У вас ещё не было спринтов сегодня.\n\nНачните первый: /sprint"
     
-    await update.message.reply_text(message, parse_mode='Markdown')
-
-# Основной обработчик сообщений
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if context.user_data.get('waiting_for_task'):
-        await handle_task_description(update, context)
-    elif context.user_data.get('waiting_for_reflection'):
-        await handle_reflection(update, context)
-    else:
-        await update.message.reply_text(
-            "Используйте команды для работы с ботом:\n"
-            "/sprint - начать 5-минутный спринт\n"
-            "/stats - посмотреть статистику\n"
-            "/motivate - получить мотивацию",
-            parse_mode='Markdown'
-        )
+    update.message.reply_text(message, parse_mode='Markdown')
 
 def main():
     init_db()
     
-    # Создание приложения с современным синтаксисом
-    application = Application.builder().token(BOT_TOKEN).build()
+    # Создание updater для версии 13.15
+    updater = Updater(BOT_TOKEN, use_context=True)
+    dispatcher = updater.dispatcher
     
     # Обработчики команд
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("sprint", start_sprint))
-    application.add_handler(CommandHandler("stats", show_stats))
-    application.add_handler(CommandHandler("motivate", motivate))
-    application.add_handler(CommandHandler("progress", progress))
+    dispatcher.add_handler(CommandHandler("start", start))
+    dispatcher.add_handler(CommandHandler("help", help_command))
+    dispatcher.add_handler(CommandHandler("sprint", start_sprint))
+    dispatcher.add_handler(CommandHandler("stats", show_stats))
+    dispatcher.add_handler(CommandHandler("motivate", motivate))
+    dispatcher.add_handler(CommandHandler("progress", progress))
     
     # Обработчик сообщений
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
     
     # Запуск бота
-    application.run_polling()
-    print("Бот запущен и работает 24/7! 🚀")
+    updater.start_polling()
+    print("✅ Бот запущен и работает 24/7! 🚀")
+    updater.idle()
 
 if __name__ == '__main__':
     main()
