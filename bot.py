@@ -2,7 +2,7 @@ import logging
 import os
 import random
 from telegram import Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from telegram.ext import Updater, CommandHandler, MessageHandler, filters, CallbackContext
 import sqlite3
 from datetime import date
 
@@ -275,7 +275,7 @@ def main():
     dispatcher.add_handler(CommandHandler("progress", progress))
     
     # Обработчик сообщений
-    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
+    dispatcher.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     # Запуск бота
     updater.start_polling()
