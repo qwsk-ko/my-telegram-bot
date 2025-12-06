@@ -4,29 +4,31 @@ import random
 import sqlite3
 from datetime import date
 from telegram import Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 # Настройка логирования
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
+logger = logging.getLogger(__name__)
 
 # Токен бота из переменных окружения
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 
 if not BOT_TOKEN:
-    print("ОШИБКА: BOT_TOKEN не найден!")
+    logger.error("❌ ОШИБКА: BOT_TOKEN не найден!")
+    print("❌ ОШИБКА: BOT_TOKEN не найден!")
     exit(1)
 
 # Система мотивационных сообщений
 MOTIVATION_PHRASES = [
-    "💫 *Ты можешь больше, чем думаешь!* Просто сделай ещё один маленький шаг.",
-    "🚀 *Помни о своей цели!* Каждые 5 минут работы приближают тебя к ней.",
-    "🌟 *Не перфекционизм, а прогресс!* Лучше сделать неидеально, чем не сделать вообще.",
-    "💪 *Ты уже прошёл часть пути!* Осталось только продолжить.",
-    "🎯 *Разбей большую задачу на маленькие шаги* — и она перестанет пугать.",
-    "🔥 *Ты справился с началом* — самое сложное уже позади!"
+    "💫 Ты можешь больше, чем думаешь! Просто сделай ещё один маленький шаг.",
+    "🚀 Помни о своей цели! Каждые 5 минут работы приближают тебя к ней.",
+    "🌟 Не перфекционизм, а прогресс! Лучше сделать неидеально, чем не сделать вообще.",
+    "💪 Ты уже прошёл часть пути! Осталось только продолжить.",
+    "🎯 Разбей большую задачу на маленькие шаги — и она перестанет пугать.",
+    "🔥 Ты справился с началом — самое сложное уже позади!"
 ]
 
 # Система похвалы по количеству спринтов
@@ -82,7 +84,7 @@ def get_stats(user_id):
     return result[0] if result else 0
 
 # Команда /start
-def start(update: Update, context: CallbackContext):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = """
 🚀 Привет! Я твой «5-минутный Стартер»!
 
@@ -97,58 +99,55 @@ def start(update: Update, context: CallbackContext):
 
 Готов сделать первый шаг? 🎯
 """
-    update.message.reply_text(welcome_text)
+    await update.message.reply_text(welcome_text)
 
 # Команда /help
-def help_command(update: Update, context: CallbackContext):
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = """
-📖 **Как пользоваться ботом:**
+Как пользоваться ботом:
 
-1. **Начать спринт** - /sprint
-2. **Работай 5 минут** - сфокусируйся на задаче  
-3. **Расскажи о успехах** - после спринта поделись результатом
+1. Начать спринт - /sprint
+2. Работай 5 минут - сфокусируйся на задаче  
+3. Расскажи о успехах - после спринта поделись результатом
 
-💡 **Советы:**
+Советы:
 - Не думай о всей задаче, думай только о 5 минутах
 - Выбери самую маленькую часть работы
 - Главное — НАЧАТЬ!
 """
-    update.message.reply_text(help_text, parse_mode='Markdown')
+    await update.message.reply_text(help_text)
 
 # Команда /sprint
-def start_sprint(update: Update, context: CallbackContext):
-    if 'user_data' not in context.__dict__:
-        context.user_data = {}
+async def start_sprint(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     context.user_data['waiting_for_task'] = True
     
-    update.message.reply_text(
-        "🎯 *Какую задачу ты будешь делать эти 5 минут?*\n\n"
+    await update.message.reply_text(
+        "🎯 Какую задачу ты будешь делать эти 5 минут?\n\n"
         "Например: 'написать 3 предложения', 'разобрать бумаги на столе', 'создать структуру документа'\n\n"
-        "Опиши её в одном сообщении:",
-        parse_mode='Markdown'
+        "Опиши её в одном сообщении:"
     )
 
 # Команда /motivate
-def motivate(update: Update, context: CallbackContext):
+async def motivate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     motivation = random.choice(MOTIVATION_PHRASES)
-    update.message.reply_text(motivation, parse_mode='Markdown')
+    await update.message.reply_text(motivation)
 
 # Команда /progress
-def progress(update: Update, context: CallbackContext):
+async def progress(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     today_sprints = get_stats(user_id)
     
     if today_sprints == 0:
-        message = "📊 *Давай начнём!* У тебя ещё не было спринтов сегодня.\n\nНачни первый: /sprint"
+        message = "📊 Давай начнём! У тебя ещё не было спринтов сегодня.\n\nНачни первый: /sprint"
     elif today_sprints <= 2:
-        message = f"📊 *Отличное начало!* {today_sprints} спринта — это {today_sprints * 5} минут продуктивной работы! \n\nПродолжай в том же духе! 💪"
+        message = f"📊 Отличное начало! {today_sprints} спринта — это {today_sprints * 5} минут продуктивной работы! \n\nПродолжай в том же духе! 💪"
     elif today_sprints <= 5:
-        message = f"📊 *Отлично работаешь!* {today_sprints} спринтов — ты явно вошёл в ритм! \n\nТак держать! 🚀"
+        message = f"📊 Отлично работаешь! {today_sprints} спринтов — ты явно вошёл в ритм! \n\nТак держать! 🚀"
     else:
-        message = f"📊 *Восхитительно!* {today_sprints} спринтов — ты просто машина продуктивности! \n\nПродолжаешь? /sprint 🔥"
+        message = f"📊 Восхитительно! {today_sprints} спринтов — ты просто машина продуктивности! \n\nПродолжаешь? /sprint 🔥"
     
-    update.message.reply_text(message, parse_mode='Markdown')
+    await update.message.reply_text(message)
 
 # Умная система анализа достижений
 def analyze_achievements(text):
@@ -171,13 +170,12 @@ def get_praise_message(sprints_count, achievement_type):
     else:
         achievement_praise = "Ты начал — это уже 50% успеха! Первый шаг сделан! 🌟"
     
-    return f"{sprint_praise}\n\n{achievement_praise}"
+    if sprint_praise:
+        return f"{sprint_praise}\n\n{achievement_praise}"
+    return achievement_praise
 
 # Обработчик сообщений
-def handle_message(update: Update, context: CallbackContext):
-    if 'user_data' not in context.__dict__:
-        context.user_data = {}
-        
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get('waiting_for_task'):
         # Обработка описания задачи
         task_description = update.message.text
@@ -185,27 +183,26 @@ def handle_message(update: Update, context: CallbackContext):
         context.user_data['waiting_for_task'] = False
         context.user_data['waiting_for_reflection'] = True
         
-        update.message.reply_text(
-            f"⏱️ *Отлично! Запускаю 5-минутный спринт!*\n\n"
-            f"*Задача:* {task_description}\n"
-            f"*Время:* 5 минут\n\n"
-            f"⏰ Таймер пошёл! Сфокусируйся на задаче. Я напомню, когда время выйдет.",
-            parse_mode='Markdown'
+        await update.message.reply_text(
+            f"⏱️ Отлично! Запускаю 5-минутный спринт!\n\n"
+            f"Задача: {task_description}\n"
+            f"Время: 5 минут\n\n"
+            f"⏰ Таймер пошёл! Сфокусируйся на задаче. Я напомню, когда время выйдет."
         )
         
-        # Запускаем таймер
-        def callback(context):
-            user_id = update.effective_user.id
-            save_sprint(user_id)
-            context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="🔔 *Время вышло! 5 минут прошли!*\n\n"
-                     "Отлично сработано! Теперь ответь на вопрос:\n\n"
-                     "*Что тебе удалось сделать за эти 5 минут?* (Опиши кратко)",
-                parse_mode='Markdown'
-            )
+        # Сохраняем данные для таймера
+        chat_id = update.effective_chat.id
+        user_id = update.effective_user.id
         
-        context.job_queue.run_once(callback, 300, context=update)
+        # Запускаем таймер (10 секунд для теста)
+        context.job_queue.run_once(
+            send_timer_notification, 
+            10,
+            data={
+                'chat_id': chat_id,
+                'user_id': user_id
+            }
+        )
     
     elif context.user_data.get('waiting_for_reflection'):
         # Обработка отчёта о спринте
@@ -221,40 +218,55 @@ def handle_message(update: Update, context: CallbackContext):
         emoji = "🏆" if achievement_type == "completion" else "🚀" if achievement_type == "progress" else "🎯"
         
         response = f"""
-{emoji} *Отличная работа!*
+{emoji} Отличная работа!
 
 {praise}
 
-*Статистика на сегодня:* {today_sprints} спринтов • {today_sprints * 5} минут в работе
+Статистика на сегодня: {today_sprints} спринтов • {today_sprints * 5} минут в работе
 
-*Что дальше?*
+Что дальше?
 /sprint - Сделать ещё один спринт
 /stats - Посмотреть статистику
 /motivate - Получить мотивацию
 
-*Помни: каждый спринт приближает тебя к цели!* ✨
+Помни: каждый спринт приближает тебя к цели! ✨
 """
-        update.message.reply_text(response, parse_mode='Markdown')
+        await update.message.reply_text(response)
         context.user_data['waiting_for_reflection'] = False
     else:
-        update.message.reply_text(
+        await update.message.reply_text(
             "Используйте команды для работы с ботом:\n"
             "/sprint - начать 5-минутный спринт\n"
             "/stats - посмотреть статистику\n"
-            "/motivate - получить мотивацию",
-            parse_mode='Markdown'
+            "/motivate - получить мотивацию"
         )
 
+# Функция для отправки уведомления по таймеру
+async def send_timer_notification(context):
+    job = context.job
+    chat_id = job.data['chat_id']
+    user_id = job.data['user_id']
+    
+    # Сохраняем спринт в БД
+    save_sprint(user_id)
+    
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text="🔔 Время вышло! 5 минут прошли!\n\n"
+             "Отлично сработано! Теперь ответь на вопрос:\n\n"
+             "Что тебе удалось сделать за эти 5 минут? (Опиши кратко)"
+    )
+
 # Команда /stats
-def show_stats(update: Update, context: CallbackContext):
+async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     today_sprints = get_stats(user_id)
     
     if today_sprints > 0:
         message = (
-            f"📊 *Ваша статистика*\n\n"
-            f"*Спринтов сегодня:* {today_sprints}\n"
-            f"*Всего времени в работе:* {today_sprints * 5} минут\n\n"
+            f"📊 Ваша статистика\n\n"
+            f"Спринтов сегодня: {today_sprints}\n"
+            f"Всего времени в работе: {today_sprints * 5} минут\n\n"
         )
         
         if today_sprints >= 3:
@@ -264,37 +276,41 @@ def show_stats(update: Update, context: CallbackContext):
     else:
         message = "📊 У вас ещё не было спринтов сегодня.\n\nНачните первый: /sprint"
     
-    update.message.reply_text(message, parse_mode='Markdown')
+    await update.message.reply_text(message)
 
 def main():
-    init_db()
+    logger.info("🚀 Запуск бота...")
     
-    # Создание updater для версии 13.15
-    updater = Updater(BOT_TOKEN, use_context=True)
-    dispatcher = updater.dispatcher
-    
-    # Обработчики команд
-    dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(CommandHandler("help", help_command))
-    dispatcher.add_handler(CommandHandler("sprint", start_sprint))
-    dispatcher.add_handler(CommandHandler("stats", show_stats))
-    dispatcher.add_handler(CommandHandler("motivate", motivate))
-    dispatcher.add_handler(CommandHandler("progress", progress))
-    
-    # Обработчик сообщений
-    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
-    
-    # Запуск бота
-    updater.start_polling()
-    print("✅ Бот запущен и работает 24/7! 🚀")
-    updater.idle()
+    try:
+        init_db()
+        
+        # Создание Application для версии 20.0+
+        application = Application.builder() \
+            .token(BOT_TOKEN) \
+            .build()
+        
+        # Обработчики команд
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("help", help_command))
+        application.add_handler(CommandHandler("sprint", start_sprint))
+        application.add_handler(CommandHandler("stats", show_stats))
+        application.add_handler(CommandHandler("motivate", motivate))
+        application.add_handler(CommandHandler("progress", progress))
+        
+        # Обработчик сообщений
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+        
+        logger.info("✅ Бот запущен и работает 24/7! 🚀")
+        print("✅ Бот запущен и работает 24/7! 🚀")
+        
+        # Запуск бота
+        application.run_polling()
+        
+    except Exception as e:
+        logger.error(f"❌ Критическая ошибка при запуске: {e}")
+        print(f"❌ Критическая ошибка: {e}")
+        import traceback
+        traceback.print_exc()
 
 if __name__ == '__main__':
     main()
-
-
-
-
-
-
-
