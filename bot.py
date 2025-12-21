@@ -325,25 +325,7 @@ async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=main_keyboard
     )
 
-# ========== ЗАПУСК ==========
-def main():
-    print("=" * 50)
-    print("🚀 Запуск бота...")
-    print("=" * 50)
-    
-    if TOKEN == "8434110078:AAEeXoKBAmmiWucygF8xiDUNMzbmEbI9vZE":
-        print("❌ ОШИБКА: Вставьте свой токен от @BotFather в строку 19!")
-        print("1. Откройте Telegram")
-        print("2. Найдите @BotFather")
-        print("3. Создайте нового бота: /newbot")
-        print("4. Скопируйте токен")
-        print("5. Вставьте в код вместо 'ВАШ_НОВЫЙ_ТОКЕН_ЗДЕСЬ'")
-        return
-    
-    try:
-        application = Application.builder().token(TOKEN).build()
-        application.post_init = set_bot_commands
-        
+
         # Регистрация команд
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("sprint", sprint))
@@ -375,5 +357,6 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
