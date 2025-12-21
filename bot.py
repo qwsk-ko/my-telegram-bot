@@ -12,7 +12,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ТОКЕН БОТА
-TOKEN = "8434110078:AAEeXoKBAmmiWucygF8x1DUNMzbmEbI9vZE"
+TOKEN = "8434110078:AAEeXoKBAmmiWucygF8xiDUNMzbmEbI9vZE"
 
 # Хранение данных
 user_data = {}
@@ -138,3 +138,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
