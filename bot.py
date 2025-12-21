@@ -13,8 +13,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ========== ТОКЕН ==========
-# ВАШ ТОКЕН БОТА
-TOKEN = "8434110078:AAEeXoKBAmmiWucygF8x1DUNMzbmEbI9vZE"
+# ⚠️ ВСТАВЬТЕ СЮДА НОВЫЙ ТОКЕН ОТ @BotFather ⚠️
+TOKEN = "8434110078:AAEeXoKBAmmiWucygF8xiDUNMzbmEbI9vZE"
 
 # ========== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==========
 user_sprints = {}
@@ -50,7 +50,6 @@ MICRO_STARTS = [
 
 # ========== ФУНКЦИИ ТАЙМЕРОВ ==========
 async def send_sprint_completion(context):
-    """Отправляет сообщение о завершении спринта"""
     job = context.job
     user_id = job.data['user_id']
     chat_id = job.data['chat_id']
@@ -73,30 +72,28 @@ async def send_sprint_completion(context):
     try:
         await context.bot.send_message(
             chat_id=chat_id,
-            text=f"🎉 **Отлично! Спринт завершен!**\n\n"
-                 f"Ты только что посвятил 5 минут задаче:\n"
-                 f"📌 **{task}**\n\n"
-                 "🔄 **Время для рефлексии:**\n\n"
-                 "1. Что удалось сделать за эти 5 минут?\n"
-                 "(Напиши ответ в чат)\n\n"
-                 "2. Стало ли сейчас проще продолжить?",
+            text=f"🎉 **Спринт завершен!**\n\n"
+                 f"📌 Задача: {task}\n\n"
+                 "🔄 **Рефлексия:**\n\n"
+                 "1. Что удалось сделать за 5 минут?\n"
+                 "(Напиши ответ)\n\n"
+                 "2. Стало ли проще продолжить?",
             reply_markup=keyboard
         )
-        logger.info(f"Sprint completion sent to user {user_id}")
         
-        # Запланировать напоминание через 5 минут
-        reminder_job = context.application.job_queue.run_once(
-            send_success_reminder,
-            300,  # 5 минут
-            data={'user_id': user_id, 'chat_id': chat_id, 'task': task},
-            name=f"reminder_{user_id}_{datetime.now().timestamp()}"
-        )
+        # Напоминание через 5 минут
+        if context.application and context.application.job_queue:
+            context.application.job_queue.run_once(
+                send_success_reminder,
+                300,
+                data={'user_id': user_id, 'chat_id': chat_id, 'task': task},
+                name=f"reminder_{user_id}"
+            )
         
     except Exception as e:
-        logger.error(f"Failed to send sprint completion: {e}")
+        logger.error(f"Ошибка: {e}")
 
 async def send_success_reminder(context):
-    """Отправляет напоминание об успехах через 5 минут"""
     job = context.job
     user_id = job.data['user_id']
     chat_id = job.data['chat_id']
@@ -107,12 +104,10 @@ async def send_success_reminder(context):
     reminder_text = f"""
 ⏰ **Напоминание о твоих успехах!**
 
-Всего 10 минут назад ты завершил спринт по задаче:
+Ты завершил спринт по задаче:
 📌 **{task}**
 
-📊 За всё время ты уже сделал(а) **{sprint_count}** спринтов!
-
-💡 Помни: даже маленькие шаги ведут к большим результатам.
+📊 Всего спринтов: **{sprint_count}**
 
 Напиши /sprint для нового старта! 🚀
 """
@@ -122,32 +117,27 @@ async def send_success_reminder(context):
             chat_id=chat_id,
             text=reminder_text
         )
-        logger.info(f"Success reminder sent to user {user_id}")
     except Exception as e:
-        logger.error(f"Failed to send reminder: {e}")
+        logger.error(f"Ошибка напоминания: {e}")
 
 # ========== ОСНОВНЫЕ КОМАНДЫ ==========
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    user_id = user.id
-    
-    if user_id not in user_sprints:
-        user_sprints[user_id] = {'current_task': '', 'sprint_count': 0, 'last_sprint': None}
     
     welcome_text = f"""
 👋 Привет, {user.first_name}!
 
-🎯 Я — твой «5-минутный Стартер» — бот для борьбы с прокрастинацией!
+🎯 Я — бот «5-минутный Стартер»!
 
-🚀 **Как это работает:**
-1. Нажимаешь «🚀 SPRINT» или пишешь /sprint
-2. Выбираешь задачу (или пишешь свою)
-3. Работаешь 5 минут без отвлечений
-4. Отмечаешь успехи и получаешь награду!
+🚀 **Как работает:**
+1. Нажми 🚀 SPRINT
+2. Выбери задачу
+3. Работай 5 минут
+4. Отмечай успехи
 
-💡 Всего 5 минут могут запустить продуктивный поток!
+💡 Всего 5 минут могут запустить продуктивность!
 
-Используй кнопки ниже или команды через / ⬇️
+Используй кнопки ниже ⬇️
 """
     
     await update.message.reply_text(welcome_text, reply_markup=main_keyboard)
@@ -156,28 +146,19 @@ async def sprint(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
     if user_id in active_sprints:
-        await update.message.reply_text(
-            "⏳ У тебя уже есть активный спринт!\n"
-            "Дождись его завершения или отмени командой /cancel",
-            reply_markup=main_keyboard
-        )
+        await update.message.reply_text("⏳ У тебя уже есть активный спринт!")
         return
-    
-    if user_id not in user_sprints:
-        user_sprints[user_id] = {'current_task': '', 'sprint_count': 0, 'last_sprint': None}
     
     keyboard = [[KeyboardButton(start)] for start in MICRO_STARTS[:4]]
     keyboard.append([KeyboardButton("✏️ Ввести свою задачу")])
     keyboard.append([KeyboardButton("⬅️ Назад")])
     
-    start_keyboard = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=True)
+    start_keyboard = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     
     await update.message.reply_text(
-        "🎯 **Выбери готовый старт или введи свою задачу:**\n\n"
-        "Ты можешь:\n"
-        "• Выбрать из списка микро-стартов\n"
-        "• Написать свою задачу (например: 'написать введение к отчету')\n\n"
-        "Помни: не нужно выполнить задачу целиком — просто поработай над ней 5 минут!",
+        "🎯 **Выбери задачу:**\n\n"
+        "Или введи свою задачу\n"
+        "Например: 'написать отчет'",
         reply_markup=start_keyboard
     )
 
@@ -185,103 +166,76 @@ async def cancel_sprint(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
     if user_id not in active_sprints:
-        await update.message.reply_text(
-            "У тебя нет активного спринта.",
-            reply_markup=main_keyboard
-        )
+        await update.message.reply_text("Нет активного спринта.")
         return
     
     task = active_sprints[user_id]['task']
     del active_sprints[user_id]
     
-    await update.message.reply_text(
-        f"❌ Спринт по задаче '{task}' отменен.\n"
-        "Ты всегда можешь начать заново командой /sprint!",
-        reply_markup=main_keyboard
-    )
+    await update.message.reply_text(f"❌ Спринт '{task}' отменен.")
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
     if user_id not in user_sprints:
-        user_sprints[user_id] = {'current_task': '', 'sprint_count': 0, 'last_sprint': None}
+        user_sprints[user_id] = {'sprint_count': 0, 'last_sprint': None}
     
     stats_data = user_sprints[user_id]
     sprint_count = stats_data['sprint_count']
-    last_sprint = stats_data['last_sprint']
     
     if sprint_count == 0:
-        message = "📊 Ты ещё не делал(а) ни одного спринта.\nПопробуй прямо сейчас — нажми 🚀 SPRINT или напиши /sprint!"
+        message = "📊 Ты ещё не делал(а) спринтов.\nПопробуй прямо сейчас — 🚀 SPRINT!"
     else:
-        if last_sprint:
-            last_time = last_sprint.strftime("%d.%m.%Y %H:%M")
-            message = f"📊 **Твоя статистика:**\n\n• Всего спринтов: {sprint_count}\n• Последний спринт: {last_time}\n\n"
-        else:
-            message = f"📊 **Твоя статистика:**\n\n• Всего спринтов: {sprint_count}\n\n"
-        
+        message = f"📊 **Твоя статистика:**\n\n• Всего спринтов: {sprint_count}\n\n"
         if sprint_count == 1:
-            message += "🎯 Отличное начало! Первый шаг — самый важный!"
+            message += "🎯 Отличное начало!"
         elif sprint_count < 5:
-            message += "🔥 Ты на верном пути! Продолжай развивать momentum!"
+            message += "🔥 Продолжай в том же духе!"
         else:
-            message += "🏆 Потрясающе! Ты настоящий мастер стартов!"
+            message += "🏆 Ты мастер стартов!"
     
     await update.message.reply_text(message, reply_markup=main_keyboard)
 
 async def library(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    starts_text = "📋 **Библиотека быстрых стартов:**\n\n"
-    
+    starts_text = "📋 **Библиотека стартов:**\n\n"
     for i, start in enumerate(MICRO_STARTS, 1):
         starts_text += f"{i}. {start}\n"
     
-    starts_text += "\nЧтобы использовать любой из них, просто нажми 🚀 SPRINT или напиши /sprint!"
-    
+    starts_text += "\nНажми 🚀 SPRINT для начала!"
     await update.message.reply_text(starts_text, reply_markup=main_keyboard)
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = """
-❓ **Помощь по использованию бота:**
+❓ **Помощь:**
 
-**Основные команды:**
+**Команды:**
 /start - Главное меню
-/sprint - Начать 5-минутный спринт
-/stats - Показать статистику
-/library - Библиотека микро-стартов
+/sprint - Начать спринт
+/stats - Статистика
+/library - Библиотека
 /cancel - Отменить спринт
-/help - Эта справка
+/help - Справка
 
-**Или используй кнопки:**
-🚀 SPRINT — начать спринт
-📊 Статистика — посмотреть достижения
-📋 Библиотека — выбрать готовую задачу
+**Как работает:**
+1. 🚀 SPRINT
+2. Выбираешь задачу
+3. Работаешь 5 минут
+4. Отмечаешь успехи
 
-**Как работает спринт:**
-1. Нажимаешь 🚀 SPRINT или /sprint
-2. Выбираешь или вводишь задачу
-3. Работаешь 5 минут без отвлечений
-4. Отвечаешь на вопросы рефлексии
-5. Получаешь напоминание через 5 минут
-6. Продолжаешь с новой энергией!
-
-💡 Совет: Не стремись сделать всё сразу. 5 минут — это только начало!
+💡 5 минут — это только начало!
 """
     
     await update.message.reply_text(help_text, reply_markup=main_keyboard)
 
 async def handle_task_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
     user_input = update.message.text
     
     if user_input == "⬅️ Назад":
-        await update.message.reply_text("Возвращаю в главное меню", reply_markup=main_keyboard)
+        await update.message.reply_text("Главное меню", reply_markup=main_keyboard)
         return
     
     if user_input == "✏️ Ввести свою задачу":
-        await update.message.reply_text(
-            "✍️ Напиши свою задачу одним предложением:\n"
-            "Например: 'составить план проекта' или 'разобрать почту'",
-            reply_markup=ReplyKeyboardRemove()
-        )
+        await update.message.reply_text("✍️ Напиши свою задачу:", reply_markup=ReplyKeyboardRemove())
         context.user_data['awaiting_custom_task'] = True
         return
     
@@ -291,193 +245,133 @@ async def handle_task_selection(update: Update, context: ContextTypes.DEFAULT_TY
         context.user_data['awaiting_custom_task'] = False
         await start_sprint_timer(update, context, user_input)
     else:
-        await update.message.reply_text(
-            "Пожалуйста, выбери задачу из списка или нажми '✏️ Ввести свою задачу'",
-            reply_markup=main_keyboard
-        )
+        await update.message.reply_text("Выбери задачу из списка", reply_markup=main_keyboard)
 
 async def start_sprint_timer(update: Update, context: ContextTypes.DEFAULT_TYPE, task: str):
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
     
-    active_sprints[user_id] = {
-        'chat_id': chat_id,
-        'task': task,
-        'start_time': datetime.now()
-    }
+    active_sprints[user_id] = {'task': task}
     
     await update.message.reply_text(
-        f"🚀 **Старт 5-минутного спринта!**\n\n"
+        f"🚀 **Старт спринта!**\n\n"
         f"📌 Задача: {task}\n"
-        f"⏱️ Таймер: 5:00\n"
-        f"🕐 Завершится в: {(datetime.now() + timedelta(minutes=5)).strftime('%H:%M:%S')}\n\n"
-        "⛔ Бот будет занят и не ответит до конца спринта!\n"
-        "Сосредоточься на задаче. У тебя всё получится! 💪\n\n"
-        "ℹ️ Для отмены спринта используй /cancel",
+        f"⏱️ 5 минут\n\n"
+        "Сосредоточься! 💪",
         reply_markup=ReplyKeyboardRemove()
     )
     
-    logger.info(f"User {user_id} started sprint with task: {task}")
-    
-    # Запланировать завершение спринта через 5 минут
+    # Таймер через JobQueue
     if context.application and context.application.job_queue:
-        sprint_job = context.application.job_queue.run_once(
+        context.application.job_queue.run_once(
             send_sprint_completion,
-            300,  # 5 минут
+            300,
             data={'user_id': user_id, 'chat_id': chat_id, 'task': task},
-            name=f"sprint_{user_id}_{datetime.now().timestamp()}"
+            name=f"sprint_{user_id}"
         )
     else:
-        # Резервный метод
-        asyncio.create_task(fallback_sprint_completion(user_id, chat_id, task, context.bot))
+        # Резервный таймер
+        asyncio.create_task(simple_timer(user_id, chat_id, task, context.bot))
 
-async def fallback_sprint_completion(user_id: int, chat_id: int, task: str, bot):
-    """Резервный метод завершения спринта"""
-    try:
-        await asyncio.sleep(300)
-        
-        if user_id in active_sprints:
-            del active_sprints[user_id]
-        
-        if user_id not in user_sprints:
-            user_sprints[user_id] = {'current_task': '', 'sprint_count': 0, 'last_sprint': None}
-        
-        user_sprints[user_id]['sprint_count'] += 1
-        user_sprints[user_id]['last_sprint'] = datetime.now()
-        
-        keyboard = ReplyKeyboardMarkup([
-            [KeyboardButton("✅ Да, стало проще"), KeyboardButton("🤔 Нет, пока сложно")],
-            [KeyboardButton("📊 Статистика"), KeyboardButton("🚀 Новый спринт")]
-        ], resize_keyboard=True, one_time_keyboard=True)
-        
-        await bot.send_message(
-            chat_id=chat_id,
-            text=f"🎉 **Отлично! Спринт завершен!**\n\n"
-                 f"Ты только что посвятил 5 минут задаче:\n"
-                 f"📌 **{task}**\n\n"
-                 "🔄 **Время для рефлексии:**\n\n"
-                 "1. Что удалось сделать за эти 5 минут?\n"
-                 "(Напиши ответ в чат)\n\n"
-                 "2. Стало ли сейчас проще продолжить?",
-            reply_markup=keyboard
-        )
-        
-        # Напоминание через 5 минут
-        await asyncio.sleep(300)
-        sprint_count = user_sprints.get(user_id, {}).get('sprint_count', 0)
-        
-        await bot.send_message(
-            chat_id=chat_id,
-            text=f"⏰ **Напоминание о твоих успехах!**\n\n"
-                 f"Всего 10 минут назад ты завершил спринт по задаче:\n"
-                 f"📌 **{task}**\n\n"
-                 f"📊 За всё время ты уже сделал(а) **{sprint_count}** спринтов!\n\n"
-                 f"💡 Помни: даже маленькие шаги ведут к большим результатам.\n\n"
-                 f"Напиши /sprint для нового старта! 🚀"
-        )
-        
-    except Exception as e:
-        logger.error(f"Error in fallback_sprint_completion: {e}")
+async def simple_timer(user_id: int, chat_id: int, task: str, bot):
+    """Простой таймер если JobQueue недоступен"""
+    await asyncio.sleep(300)
+    
+    if user_id in active_sprints:
+        del active_sprints[user_id]
+    
+    if user_id not in user_sprints:
+        user_sprints[user_id] = {'sprint_count': 0}
+    
+    user_sprints[user_id]['sprint_count'] += 1
+    
+    keyboard = ReplyKeyboardMarkup([
+        [KeyboardButton("✅ Да"), KeyboardButton("🤔 Нет")],
+        [KeyboardButton("🚀 Новый спринт")]
+    ], resize_keyboard=True)
+    
+    await bot.send_message(
+        chat_id=chat_id,
+        text=f"🎉 **Спринт завершен!**\n\n"
+             f"📌 Задача: {task}\n\n"
+             "Стало ли проще продолжить?",
+        reply_markup=keyboard
+    )
 
 async def handle_reflection_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
     user_input = update.message.text
     
-    if user_input == "✅ Да, стало проще":
-        response = "Отлично! Инерция работает на тебя! Продолжай в том же духе! 🎯"
-    elif user_input == "🤔 Нет, пока сложно":
-        response = "Это нормально! Главное — ты сделал(а) первый шаг. Иногда нужно несколько спринтов, чтобы войти в поток. Попробуй ещё раз! 💪"
-    elif user_input == "📊 Статистика":
-        await stats(update, context)
-        return
+    if user_input == "✅ Да":
+        response = "Отлично! Продолжай! 🎯"
+    elif user_input == "🤔 Нет":
+        response = "Главное — начало! 💪"
     elif user_input == "🚀 Новый спринт":
         await sprint(update, context)
         return
     else:
-        response = f"Зафиксировал твой прогресс: '{user_input}'\n\nТеперь ответь на второй вопрос: стало ли проще продолжить?"
-        await update.message.reply_text(response)
+        await update.message.reply_text("Ответь Да или Нет")
         return
     
-    await update.message.reply_text(
-        response + f"\n\n🎁 Ты получаешь +1 балл!\nВсего спринтов: {user_sprints[user_id]['sprint_count']}",
-        reply_markup=main_keyboard
-    )
+    await update.message.reply_text(response, reply_markup=main_keyboard)
 
 async def set_bot_commands(application):
     await application.bot.set_my_commands(COMMANDS)
-    logger.info("Bot commands menu has been set")
 
 async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Извини, я не понял команду 😕\n\n"
-        "Используй кнопки меню или команды через /:\n"
-        "/start — главное меню\n"
-        "/sprint — начать спринт\n"
-        "/stats — статистика\n"
-        "/help — помощь",
+        "Используй кнопки или команды:\n"
+        "/start - меню\n"
+        "/sprint - начать",
         reply_markup=main_keyboard
     )
 
-# ========== ОСНОВНАЯ ФУНКЦИЯ ==========
+# ========== ЗАПУСК ==========
 def main():
-    # Создаем приложение
-    application = (
-        Application.builder()
-        .token(TOKEN)
-        .concurrent_updates(True)
-        .build()
-    )
-    
-    # Устанавливаем меню команд
-    application.post_init = set_bot_commands
-    
-    # Регистрируем обработчики команд
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("sprint", sprint))
-    application.add_handler(CommandHandler("stats", stats))
-    application.add_handler(CommandHandler("library", library))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("cancel", cancel_sprint))
-    
-    # Регистрируем обработчики сообщений для кнопок
-    application.add_handler(MessageHandler(filters.Text(["🚀 SPRINT"]), sprint))
-    application.add_handler(MessageHandler(filters.Text(["📊 Статистика"]), stats))
-    application.add_handler(MessageHandler(filters.Text(["📋 Библиотека стартов"]), library))
-    application.add_handler(MessageHandler(filters.Text(["❓ Помощь"]), help_command))
-    
-    # Обработчик выбора задачи
-    application.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND, 
-        handle_task_selection
-    ))
-    
-    # Обработчик ответов на вопросы рефлексии
-    application.add_handler(MessageHandler(
-        filters.Text(["✅ Да, стало проще", "🤔 Нет, пока сложно", "📊 Статистика", "🚀 Новый спринт"]),
-        handle_reflection_response
-    ))
-    
-    # Обработчик неизвестных сообщений
-    application.add_handler(MessageHandler(filters.ALL, unknown))
-    
-    # Запуск бота
     print("=" * 50)
-    print("🚀 Бот '5-минутный Стартер' запускается...")
-    print(f"📱 Токен: {TOKEN[:10]}...")
+    print("🚀 Запуск бота...")
     print("=" * 50)
+    
+    if TOKEN == "8434110078:AAEeXoKBAmmiWucygF8xiDUNMzbmEbI9vZE":
+        print("❌ ОШИБКА: Вставьте свой токен от @BotFather в строку 19!")
+        print("1. Откройте Telegram")
+        print("2. Найдите @BotFather")
+        print("3. Создайте нового бота: /newbot")
+        print("4. Скопируйте токен")
+        print("5. Вставьте в код вместо "8434110078:AAEeXoKBAmmiWucygF8xiDUNMzbmEbI9vZE")
+        return
     
     try:
-        application.run_polling(
-            allowed_updates=Update.ALL_TYPES,
-            drop_pending_updates=True
-        )
+        application = Application.builder().token(TOKEN).build()
+        application.post_init = set_bot_commands
+        
+        # Регистрация команд
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("sprint", sprint))
+        application.add_handler(CommandHandler("stats", stats))
+        application.add_handler(CommandHandler("library", library))
+        application.add_handler(CommandHandler("help", help_command))
+        application.add_handler(CommandHandler("cancel", cancel_sprint))
+        
+        # Регистрация кнопок
+        application.add_handler(MessageHandler(filters.Text(["🚀 SPRINT"]), sprint))
+        application.add_handler(MessageHandler(filters.Text(["📊 Статистика"]), stats))
+        application.add_handler(MessageHandler(filters.Text(["📋 Библиотека стартов"]), library))
+        application.add_handler(MessageHandler(filters.Text(["❓ Помощь"]), help_command))
+        
+        # Обработчики сообщений
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_task_selection))
+        application.add_handler(MessageHandler(filters.Text(["✅ Да", "🤔 Нет", "🚀 Новый спринт"]), handle_reflection_response))
+        application.add_handler(MessageHandler(filters.ALL, unknown))
+        
+        print("✅ Бот запущен!")
+        print("✅ Откройте Telegram и найдите своего бота")
+        print("=" * 50)
+        
+        application.run_polling(drop_pending_updates=True)
+        
     except Exception as e:
-        print(f"❌ Ошибка запуска бота: {e}")
-        print("⚠️  Проверьте:")
-        print("1. Правильность токена")
-        print("2. Наличие интернет-соединения")
-        print("3. Не заблокирован ли бот")
+        print(f"❌ Ошибка: {e}")
+        print("Проверьте токен!")
 
 if __name__ == '__main__':
     main()
-
