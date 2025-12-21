@@ -1,4 +1,5 @@
 import logging
+import os
 from datetime import datetime, timedelta
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, BotCommand
 from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
@@ -11,11 +12,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Глобальные переменные для хранения состояния
-user_sprints = {}  # {user_id: {'current_task': str, 'sprint_count': int, 'last_sprint': datetime, 'active_jobs': list}}
-active_sprints = {}  # {user_id: {'chat_id': int, 'task': str, 'start_time': datetime}}
+# ========== ТОКЕН ==========
+# ВАШ ТОКЕН БОТА
+TOKEN = "8434110078:AAEeXoKBAmmiWucygF8x1DUNMzbmEbI9vZE"
 
-# Команды для меню
+# ========== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ==========
+user_sprints = {}
+active_sprints = {}
+
+# ========== КОМАНДЫ МЕНЮ ==========
 COMMANDS = [
     BotCommand("start", "Главное меню"),
     BotCommand("sprint", "Начать 5-минутный спринт"),
@@ -25,13 +30,13 @@ COMMANDS = [
     BotCommand("cancel", "Отменить текущий спринт"),
 ]
 
-# Клавиатура для главного меню
+# ========== КЛАВИАТУРА ==========
 main_keyboard = ReplyKeyboardMarkup([
     [KeyboardButton("🚀 SPRINT"), KeyboardButton("📊 Статистика")],
     [KeyboardButton("📋 Библиотека стартов"), KeyboardButton("❓ Помощь")]
 ], resize_keyboard=True)
 
-# Библиотека микро-стартов
+# ========== БИБЛИОТЕКА СТАРТОВ ==========
 MICRO_STARTS = [
     "📝 Написать 3 предложения по задаче",
     "🗂️ Разобрать 5 файлов/бумаг на столе",
@@ -43,8 +48,7 @@ MICRO_STARTS = [
     "✏️ Составить список на день"
 ]
 
-# ========== ФУНКЦИИ ДЛЯ ТАЙМЕРОВ ==========
-
+# ========== ФУНКЦИИ ТАЙМЕРОВ ==========
 async def send_sprint_completion(context):
     """Отправляет сообщение о завершении спринта"""
     job = context.job
@@ -52,18 +56,15 @@ async def send_sprint_completion(context):
     chat_id = job.data['chat_id']
     task = job.data['task']
     
-    # Удаляем из активных спринтов
     if user_id in active_sprints:
         del active_sprints[user_id]
     
-    # Обновляем статистику
     if user_id not in user_sprints:
-        user_sprints[user_id] = {'current_task': '', 'sprint_count': 0, 'last_sprint': None, 'active_jobs': []}
+        user_sprints[user_id] = {'current_task': '', 'sprint_count': 0, 'last_sprint': None}
     
     user_sprints[user_id]['sprint_count'] += 1
     user_sprints[user_id]['last_sprint'] = datetime.now()
     
-    # Вопросы для рефлексии
     keyboard = ReplyKeyboardMarkup([
         [KeyboardButton("✅ Да, стало проще"), KeyboardButton("🤔 Нет, пока сложно")],
         [KeyboardButton("📊 Статистика"), KeyboardButton("🚀 Новый спринт")]
@@ -84,20 +85,15 @@ async def send_sprint_completion(context):
         logger.info(f"Sprint completion sent to user {user_id}")
         
         # Запланировать напоминание через 5 минут
-        if context.application and context.application.job_queue:
-            reminder_job = context.application.job_queue.run_once(
-                send_success_reminder,
-                300,  # 5 минут
-                data={'user_id': user_id, 'chat_id': chat_id, 'task': task},
-                name=f"reminder_{user_id}_{datetime.now().timestamp()}"
-            )
-            
-            # Сохраняем ID работы для возможной отмены
-            if user_id in user_sprints:
-                user_sprints[user_id]['active_jobs'].append(reminder_job.name)
+        reminder_job = context.application.job_queue.run_once(
+            send_success_reminder,
+            300,  # 5 минут
+            data={'user_id': user_id, 'chat_id': chat_id, 'task': task},
+            name=f"reminder_{user_id}_{datetime.now().timestamp()}"
+        )
         
     except Exception as e:
-        logger.error(f"Failed to send sprint completion to user {user_id}: {e}")
+        logger.error(f"Failed to send sprint completion: {e}")
 
 async def send_success_reminder(context):
     """Отправляет напоминание об успехах через 5 минут"""
@@ -106,7 +102,6 @@ async def send_success_reminder(context):
     chat_id = job.data['chat_id']
     task = job.data['task']
     
-    # Получаем статистику пользователя
     sprint_count = user_sprints.get(user_id, {}).get('sprint_count', 0)
     
     reminder_text = f"""
@@ -119,8 +114,6 @@ async def send_success_reminder(context):
 
 💡 Помни: даже маленькие шаги ведут к большим результатам.
 
-Хочешь сделать ещё один 5-минутный рывок?
-
 Напиши /sprint для нового старта! 🚀
 """
     
@@ -131,17 +124,15 @@ async def send_success_reminder(context):
         )
         logger.info(f"Success reminder sent to user {user_id}")
     except Exception as e:
-        logger.error(f"Failed to send reminder to user {user_id}: {e}")
+        logger.error(f"Failed to send reminder: {e}")
 
 # ========== ОСНОВНЫЕ КОМАНДЫ ==========
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id
     
-    # Инициализация пользователя
     if user_id not in user_sprints:
-        user_sprints[user_id] = {'current_task': '', 'sprint_count': 0, 'last_sprint': None, 'active_jobs': []}
+        user_sprints[user_id] = {'current_task': '', 'sprint_count': 0, 'last_sprint': None}
     
     welcome_text = f"""
 👋 Привет, {user.first_name}!
@@ -164,7 +155,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def sprint(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
-    # Проверяем, нет ли уже активного спринта
     if user_id in active_sprints:
         await update.message.reply_text(
             "⏳ У тебя уже есть активный спринт!\n"
@@ -174,9 +164,8 @@ async def sprint(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     if user_id not in user_sprints:
-        user_sprints[user_id] = {'current_task': '', 'sprint_count': 0, 'last_sprint': None, 'active_jobs': []}
+        user_sprints[user_id] = {'current_task': '', 'sprint_count': 0, 'last_sprint': None}
     
-    # Предлагаем выбрать или ввести задачу
     keyboard = [[KeyboardButton(start)] for start in MICRO_STARTS[:4]]
     keyboard.append([KeyboardButton("✏️ Ввести свою задачу")])
     keyboard.append([KeyboardButton("⬅️ Назад")])
@@ -193,7 +182,6 @@ async def sprint(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def cancel_sprint(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Отмена текущего спринта"""
     user_id = update.effective_user.id
     
     if user_id not in active_sprints:
@@ -203,20 +191,6 @@ async def cancel_sprint(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     
-    # Отменяем все запланированные задания для этого пользователя
-    if user_id in user_sprints and 'active_jobs' in user_sprints[user_id]:
-        for job_name in user_sprints[user_id]['active_jobs'][:]:
-            current_jobs = []
-            if context.application and context.application.job_queue:
-                current_jobs = context.application.job_queue.get_jobs_by_name(job_name)
-            
-            for job in current_jobs:
-                job.schedule_removal()
-            
-            # Удаляем из списка
-            user_sprints[user_id]['active_jobs'].remove(job_name)
-    
-    # Удаляем из активных спринтов
     task = active_sprints[user_id]['task']
     del active_sprints[user_id]
     
@@ -227,11 +201,10 @@ async def cancel_sprint(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показать статистику пользователя"""
     user_id = update.effective_user.id
     
     if user_id not in user_sprints:
-        user_sprints[user_id] = {'current_task': '', 'sprint_count': 0, 'last_sprint': None, 'active_jobs': []}
+        user_sprints[user_id] = {'current_task': '', 'sprint_count': 0, 'last_sprint': None}
     
     stats_data = user_sprints[user_id]
     sprint_count = stats_data['sprint_count']
@@ -246,7 +219,6 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             message = f"📊 **Твоя статистика:**\n\n• Всего спринтов: {sprint_count}\n\n"
         
-        # Добавляем мотивационное сообщение
         if sprint_count == 1:
             message += "🎯 Отличное начало! Первый шаг — самый важный!"
         elif sprint_count < 5:
@@ -257,27 +229,25 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(message, reply_markup=main_keyboard)
 
 async def library(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показать библиотеку микро-стартов"""
     starts_text = "📋 **Библиотека быстрых стартов:**\n\n"
     
     for i, start in enumerate(MICRO_STARTS, 1):
         starts_text += f"{i}. {start}\n"
     
-    starts_text += "\nЧтобы использовать любой из них, просто нажми 🚀 SPRINT или напиши /sprint и выбери подходящий вариант!"
+    starts_text += "\nЧтобы использовать любой из них, просто нажми 🚀 SPRINT или напиши /sprint!"
     
     await update.message.reply_text(starts_text, reply_markup=main_keyboard)
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показать справку"""
     help_text = """
 ❓ **Помощь по использованию бота:**
 
-**Основные команды (пиши через /):**
+**Основные команды:**
 /start - Главное меню
 /sprint - Начать 5-минутный спринт
 /stats - Показать статистику
 /library - Библиотека микро-стартов
-/cancel - Отменить текущий спринт
+/cancel - Отменить спринт
 /help - Эта справка
 
 **Или используй кнопки:**
@@ -290,7 +260,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 2. Выбираешь или вводишь задачу
 3. Работаешь 5 минут без отвлечений
 4. Отвечаешь на вопросы рефлексии
-5. Получаешь напоминание о своих успехах через 5 минут
+5. Получаешь напоминание через 5 минут
 6. Продолжаешь с новой энергией!
 
 💡 Совет: Не стремись сделать всё сразу. 5 минут — это только начало!
@@ -299,7 +269,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(help_text, reply_markup=main_keyboard)
 
 async def handle_task_selection(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка выбора задачи пользователем"""
     user_id = update.effective_user.id
     user_input = update.message.text
     
@@ -317,12 +286,10 @@ async def handle_task_selection(update: Update, context: ContextTypes.DEFAULT_TY
         return
     
     if user_input in MICRO_STARTS:
-        task = user_input
-        await start_sprint_timer(update, context, task)
+        await start_sprint_timer(update, context, user_input)
     elif context.user_data.get('awaiting_custom_task'):
-        task = user_input
         context.user_data['awaiting_custom_task'] = False
-        await start_sprint_timer(update, context, task)
+        await start_sprint_timer(update, context, user_input)
     else:
         await update.message.reply_text(
             "Пожалуйста, выбери задачу из списка или нажми '✏️ Ввести свою задачу'",
@@ -330,18 +297,15 @@ async def handle_task_selection(update: Update, context: ContextTypes.DEFAULT_TY
         )
 
 async def start_sprint_timer(update: Update, context: ContextTypes.DEFAULT_TYPE, task: str):
-    """Запуск таймера спринта"""
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
     
-    # Сохраняем в активные спринты
     active_sprints[user_id] = {
         'chat_id': chat_id,
         'task': task,
         'start_time': datetime.now()
     }
     
-    # Сообщение о начале спринта
     await update.message.reply_text(
         f"🚀 **Старт 5-минутного спринта!**\n\n"
         f"📌 Задача: {task}\n"
@@ -355,43 +319,32 @@ async def start_sprint_timer(update: Update, context: ContextTypes.DEFAULT_TYPE,
     
     logger.info(f"User {user_id} started sprint with task: {task}")
     
-    # ИСПРАВЛЕННАЯ СТРОКА: используем application.job_queue
+    # Запланировать завершение спринта через 5 минут
     if context.application and context.application.job_queue:
-        # Запланировать завершение спринта через 5 минут
         sprint_job = context.application.job_queue.run_once(
             send_sprint_completion,
             300,  # 5 минут
             data={'user_id': user_id, 'chat_id': chat_id, 'task': task},
             name=f"sprint_{user_id}_{datetime.now().timestamp()}"
         )
-        
-        # Сохраняем ID работы
-        if user_id not in user_sprints:
-            user_sprints[user_id] = {'current_task': '', 'sprint_count': 0, 'last_sprint': None, 'active_jobs': []}
-        
-        user_sprints[user_id]['active_jobs'].append(sprint_job.name)
     else:
-        # Если JobQueue недоступен, используем асинхронную задачу
-        logger.warning("JobQueue not available, using asyncio task")
+        # Резервный метод
         asyncio.create_task(fallback_sprint_completion(user_id, chat_id, task, context.bot))
 
 async def fallback_sprint_completion(user_id: int, chat_id: int, task: str, bot):
-    """Резервный метод завершения спринта если JobQueue недоступен"""
+    """Резервный метод завершения спринта"""
     try:
-        await asyncio.sleep(300)  # 5 минут
+        await asyncio.sleep(300)
         
-        # Удаляем из активных спринтов
         if user_id in active_sprints:
             del active_sprints[user_id]
         
-        # Обновляем статистику
         if user_id not in user_sprints:
-            user_sprints[user_id] = {'current_task': '', 'sprint_count': 0, 'last_sprint': None, 'active_jobs': []}
+            user_sprints[user_id] = {'current_task': '', 'sprint_count': 0, 'last_sprint': None}
         
         user_sprints[user_id]['sprint_count'] += 1
         user_sprints[user_id]['last_sprint'] = datetime.now()
         
-        # Вопросы для рефлексии
         keyboard = ReplyKeyboardMarkup([
             [KeyboardButton("✅ Да, стало проще"), KeyboardButton("🤔 Нет, пока сложно")],
             [KeyboardButton("📊 Статистика"), KeyboardButton("🚀 Новый спринт")]
@@ -409,13 +362,24 @@ async def fallback_sprint_completion(user_id: int, chat_id: int, task: str, bot)
             reply_markup=keyboard
         )
         
-        logger.info(f"Fallback sprint completion for user {user_id}")
+        # Напоминание через 5 минут
+        await asyncio.sleep(300)
+        sprint_count = user_sprints.get(user_id, {}).get('sprint_count', 0)
+        
+        await bot.send_message(
+            chat_id=chat_id,
+            text=f"⏰ **Напоминание о твоих успехах!**\n\n"
+                 f"Всего 10 минут назад ты завершил спринт по задаче:\n"
+                 f"📌 **{task}**\n\n"
+                 f"📊 За всё время ты уже сделал(а) **{sprint_count}** спринтов!\n\n"
+                 f"💡 Помни: даже маленькие шаги ведут к большим результатам.\n\n"
+                 f"Напиши /sprint для нового старта! 🚀"
+        )
         
     except Exception as e:
         logger.error(f"Error in fallback_sprint_completion: {e}")
 
 async def handle_reflection_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка ответов на вопросы рефлексии"""
     user_id = update.effective_user.id
     user_input = update.message.text
     
@@ -430,7 +394,6 @@ async def handle_reflection_response(update: Update, context: ContextTypes.DEFAU
         await sprint(update, context)
         return
     else:
-        # Это ответ на первый вопрос "Что удалось сделать?"
         response = f"Зафиксировал твой прогресс: '{user_input}'\n\nТеперь ответь на второй вопрос: стало ли проще продолжить?"
         await update.message.reply_text(response)
         return
@@ -441,12 +404,10 @@ async def handle_reflection_response(update: Update, context: ContextTypes.DEFAU
     )
 
 async def set_bot_commands(application):
-    """Установка меню команд бота"""
     await application.bot.set_my_commands(COMMANDS)
     logger.info("Bot commands menu has been set")
 
 async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка неизвестных команд"""
     await update.message.reply_text(
         "Извини, я не понял команду 😕\n\n"
         "Используй кнопки меню или команды через /:\n"
@@ -458,12 +419,8 @@ async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # ========== ОСНОВНАЯ ФУНКЦИЯ ==========
-
 def main():
-    # Вставьте сюда ваш токен
-    TOKEN = "8434110078:AAEeXoKBAmmiWucygF8x1DUNMzbmEbI9vZE"
-    
-    # Создаем приложение с JobQueue
+    # Создаем приложение
     application = (
         Application.builder()
         .token(TOKEN)
@@ -505,19 +462,21 @@ def main():
     
     # Запуск бота
     print("=" * 50)
-    print("✅ Бот '5-минутный Стартер' запущен!")
-    print("✅ JobQueue инициализирован корректно")
-    print("✅ Бот будет работать 24/7 без зависаний")
+    print("🚀 Бот '5-минутный Стартер' запускается...")
+    print(f"📱 Токен: {TOKEN[:10]}...")
     print("=" * 50)
     
-    application.run_polling(
-        allowed_updates=Update.ALL_TYPES,
-        drop_pending_updates=True,
-        close_loop=False
-    )
+    try:
+        application.run_polling(
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True
+        )
+    except Exception as e:
+        print(f"❌ Ошибка запуска бота: {e}")
+        print("⚠️  Проверьте:")
+        print("1. Правильность токена")
+        print("2. Наличие интернет-соединения")
+        print("3. Не заблокирован ли бот")
 
 if __name__ == '__main__':
     main()
-
-
-
