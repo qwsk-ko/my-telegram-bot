@@ -461,7 +461,7 @@ async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     # Вставьте сюда ваш токен
-    TOKEN = 8434110078:AAEeXoKBAmmiWucygF8xiDUNMzbmEbI9vZE
+    TOKEN = "8434110078:AAEeXoKBAmmiWucygF8x1DUNMzbmEbI9vZE"
     
     # Создаем приложение с JobQueue
     application = (
@@ -518,5 +518,6 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
